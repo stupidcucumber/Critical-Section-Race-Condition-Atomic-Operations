@@ -1,5 +1,4 @@
 import threading, argparse, time, atomics
-from typing import Callable
 
 result = 0
 atomic_result: atomics.INTEGRAL = atomics.atomic(4, atomics.INT)
@@ -13,40 +12,51 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+class UnprotectedThread(threading.Thread):
+    def __init__(self, max_actions: int = 10 ** 9) -> None:
+        super(UnprotectedThread, self).__init__()
+        self.max_actions = max_actions
+        
+    def run(self) -> None:
+        global result
+        for _ in range(self.max_actions):
+            result += 1
+
+
+class MutexThread(threading.Thread):
+    def __init__(self, lock: threading.Lock, max_actions: int = 10 ** 9) -> None:
+        super(MutexThread, self).__init__()
+        self.lock = lock
+        self.max_actions = max_actions
+        
+    def run(self) -> None:
+        global result
+        for _ in range(self.max_actions):
+            self.lock.acquire()
+            result += 1
+            self.lock.release()
+
+
+class AtomicThread(threading.Thread):
+    def __init__(self, max_actions: int = 10 ** 9) -> None:
+        super(AtomicThread, self).__init__()
+        self.max_actions = max_actions
+        
+    def run(self) -> None:
+        global atomic_result
+        for _ in range(self.max_actions):
+            atomic_result.inc()
+
+
 def clear_setup() -> None:
     global result
     result = 0
-
-
-def no_protection_task(max: int = 2 * 10 ** 9) -> None:
-    global result
-    while result < max:
-        result += 1
-        
-        
-def mutex_task(lock: threading.Lock, max: int = 2 * 10 ** 9) -> None:
-    global result
-    while result < max:
-        lock.acquire()
-        result += 1
-        lock.release()
-
-
-def atomic_task(max: int = 2 * 10 ** 9) -> None:
-     global atomic_result
-     while atomic_result.fetch_inc() < max:
-        atomic_result.inc()
     
 
-def run_experiment(target: Callable, **kwargs) -> tuple[float, int]:
-    thread_1 = threading.Thread(
-        target=target,
-        kwargs=kwargs
-    )
-    thread_2 = threading.Thread(
-        target=target,
-        kwargs=kwargs
-    )
+def run_experiment(thread_class, **kwargs) -> tuple[float, int]:
+    global result
+    thread_1 = thread_class(**kwargs)
+    thread_2 = thread_class(**kwargs)
     start = time.perf_counter()
     thread_1.start()
     thread_2.start()
@@ -62,8 +72,8 @@ if __name__ == '__main__':
     if args.no_protection:
         print('Start execution of the experiment without protection...')
         running_time, result = run_experiment(
-            target=no_protection_task,
-            max=args.sum_to
+            thread_class=UnprotectedThread,
+            max_actions=args.sum_to // 2
         )
         print('Running time: %0.4f, result: %d' % (running_time, result))
         clear_setup()
@@ -71,8 +81,8 @@ if __name__ == '__main__':
     if args.mutex:
         print('Start execution of the experiment with mutex...')
         running_time, result = run_experiment(
-            target=mutex_task,
-            max=args.sum_to,
+            thread_class=MutexThread,
+            max_actions=args.sum_to // 2,
             lock=threading.Lock()
         )
         print('Running time: %0.4f, result: %d' % (running_time, result))
@@ -81,9 +91,9 @@ if __name__ == '__main__':
     if args.atomic:
         print('Start execution of the experiment without protection...')
         running_time, result = run_experiment(
-            target=atomic_task,
-            max=args.sum_to
+            thread_class=AtomicThread,
+            max_actions=args.sum_to // 2
         )
-        print('Running time: %0.4f, result: %d' % (running_time, result))
+        print('Running time: %0.4f, result: %d' % (running_time, atomic_result.fetch_inc()))
         clear_setup()
         
