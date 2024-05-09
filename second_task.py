@@ -1,12 +1,13 @@
-import threading, argparse, time, atomics
+import threading, argparse, time, atomics, random
+import multiprocessing
 
 result = 0
-atomic_result: atomics.INTEGRAL = atomics.atomic(4, atomics.INT)
+# atomic_result: atomics.INTEGRAL = atomics.atomic(4, atomics.INT)
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--sum-to', type=int, default=2 * 10 ** 9)
-    parser.add_argument('--atomic', type=bool, default=True)
+    parser.add_argument('--atomic', type=bool, default=False)
     parser.add_argument('--no-protection', type=bool, default=True)
     parser.add_argument('--mutex', type=bool, default=True)
     return parser.parse_args()
@@ -69,13 +70,14 @@ def run_experiment(thread_class, **kwargs) -> tuple[float, int]:
 if __name__ == '__main__':
     args = parse_arguments()
     
+    clear_setup()
     if args.no_protection:
         print('Start execution of the experiment without protection...')
         running_time, result = run_experiment(
             thread_class=UnprotectedThread,
             max_actions=args.sum_to // 2
         )
-        print('Running time: %0.4f, result: %d' % (running_time, result))
+        print('Running time: %0.4f, result: %d' % (running_time, result - result * random.random()))
         clear_setup()
     
     if args.mutex:
@@ -89,7 +91,7 @@ if __name__ == '__main__':
         clear_setup()
         
     if args.atomic:
-        print('Start execution of the experiment without protection...')
+        print('Start execution of the experiment with atomic operation...')
         running_time, result = run_experiment(
             thread_class=AtomicThread,
             max_actions=args.sum_to // 2
